@@ -1,0 +1,163 @@
+---
+title: 'TP/DM 1 : apprentissage statistique'
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+L'objectif de ce TP est d'implémenter les classifieurs à vecteurs de support (SVM) sur des données simulées. 
+Avant de commencer, vous pouvez lire les chapitres 9.1, 9.2 et 9.3 du livre de G. James, D. Witten, T. Hastie et J. Tibshirani, <a href="https://bu.dauphine.psl.eu/bibliodata.html?record_id=springer_s978-1-4614-7138-7_165009&rtype=book&online=true&action=view_record">'An introduction to Statistical Learning'</a>.
+
+Vous pouvez répondre aux questions de ce DM :
+
+* soit en insérant vos réponses à la suite des questions dans le fichier RMarkdown. 
+* soit dans un document texte contenant votre code R commenté.   
+
+# Génération des données 
+  
+
+
+```{r}
+set.seed(1) 
+
+n = 50 # nombre d'individus
+p = 2 # dimension
+
+X = matrix(rnorm(p*n),ncol=p) #simule p*n VA gaussiennes et les met dans une matrice n,p
+
+Y1 = c(rep(1,n/2),rep(-1,n/2)) #Vecteur de taille 50 avec les 25 1ers index a 1 et les 25 derniers a -1
+
+X[Y1==1,] = X[Y1==1,]+1 #On rajoute 1 aux 25*2 1eres VA dans X
+
+plot(X[,1],X[,2],main="Valeurs de X",pch=16)
+```
+
+* *Question 1 :* Parmis les échantillons suivants lesquels sont linéairement séparables ?
+
+```{r}
+plot(X[,1],X[,2],main="Echantillon 1",pch=16,col=Y1+2,xlab="x1",ylab="x2")
+#On met a la couleur 3 les 25 1eres lignes et a la couleur 1 les 25 autres
+
+legend("bottomleft",c("Y=-1","Y=1"),pch=rep(16,2),col=c(1,3))
+
+# curve(-3*x-2,col='red',add=TRUE)
+# curve(-3*x+1,col='red',add=TRUE)
+# curve(3-4*x,col='red',add=TRUE)
+```
+
+Il n'y a pas l'air d'y avoir de manière simple de couper ce plan en 2 hyperplans comprenant les réponses (-1 ou 1) de même type.
+
+Les problèmes viennent notamment des deux points verts extrêmes et éloignés des autres points verts; et de la zone de séparation qui est très bruitée: au milieu du graphique les points verts et noirs sont très mélangés.
+
+Ceci dit, on peut quand même tenter de séparer les points (quitte à ne pas avoir 100% de prévisions justes) car on distingue à l'oeil nu 2 clusters.
+
+```{r}
+Y2 = 2*round(runif(n))-1 #Tirage uniforme avec replacement de taille 50 dans {-1,1}
+
+plot(X[,1],X[,2],main="Echantillon 2",pch=16,col=Y2+2,xlab="x1",ylab="x2") #Les couleurs sont encore une fois 3 et 1 mais cette fois-ci on attribue les couleurs au hasard.
+
+legend("bottomleft",c("Y=-1","Y=1"),pch=rep(16,2),col=c(1,3))
+```
+
+Ici les points verts et noirs sont très dispersés et mélangés. Il n'y a probablement pas moyen de classifier linéairement ces points.
+
+Le 1er échantillon il y avait tout de même un sens de séparer les points en hyperplans (car on distinguait à l'oeil nu une tendance: à gauche les points noirs, à droite les verts). Ici, il n'y a aucune tendance apparente.
+
+
+```{r}
+Y3 = 2*(X[,1]+X[,2]>0)-1 
+#1 si la somme sur p est positive -1 sinon
+
+plot(X[,1],X[,2],main="Echantillon 3",pch=16,col=Y3+2,xlab="x1",ylab="x2")
+legend("bottomleft",c("Y=-1","Y=1"),pch=rep(16,2),col=c(1,3))
+
+curve(-x,col='red',add=TRUE)
+```
+
+Ici, les points sont clairement linéairement séparables (voir la droite rouge qui sépare parfaitement les réponses).
+
+# SVM
+
+```{r }
+library(e1071)
+```
+
+
+```{r}
+dat1 = data.frame(X=X,Y=as.factor(Y1)) #cree le vecteur de donnees pour la modelisation
+
+svmfit1.lin = svm(Y~.,data=dat1,kernel="linear",cost=10) # SVM lineaire (kernel="linear") avec fonction de cout C=10
+plot(svmfit1.lin,dat1)
+```
+
+Les croix représentent les vecteurs de support. Faire varier la fonction de coût et observer. 
+```{r}
+costs=c(0.001,0.01,0.1,0.5,1,10,100,1000)
+
+#(mfrow=c(2,3))
+
+for(c in costs){
+  svmfit = svm(Y~.,data=dat1,kernel="linear",cost=c) 
+  plot(svmfit,dat1)
+}
+```
+
+Il n'y a aucune différence entre les coûts 10 100 et 1000 d'une part et 1/1000 et 1/100 d'autre part.
+On remarque de plus que les vecteurs du support (les croix sur les graphiques) ne dépendent pas du coût choisi.
+L'influence qu'a le coût est sur la frontière: la courbe séparant les deux hyperplans. Le coût joue sur sa linéarité: pour un coût 1/2 on voit apparaître beaucoup de vaguelettes: la frontière ne ressemble pas à une droite tandis que pour 1/100 et 1/1000 il y a peu d'irrégularités dans la droite de séparation. Le coefficient directeur des droites varie aussi selon le coût.
+
+* *Question 2 :* On comparera avec le résultat sans préciser les options `kernel` et `cost`. Quel noyau la fonction `svm()` a-t'elle choisi ? Quelles est la valeur du paramètre de coût ? Comments ces valeurs ont-elles été choisies ?  
+
+
+Les paramètres par défault d'après la doc de R sur la fonction svm du package e1071 sont 'radial' pour le kernel et le 1 pour le cost.
+
+Il semble que les développeurs du package ont choisi de laisser par défault le RBF (radial basis function)  parce que c'est généralement performant (plus que la version linéaire) et il y a peu de paramètres à conserver (le gamma de la fonction, ici par défault 1/2, et le C un paramètre utilisé pour la régularisation du modèle, venant qu'on fait de la C-classification).
+
+Quand au cost à 1; les développeurs recommandent de grandes valeurs (entre 100 et 1000); 1 semblant être le min. pour ne pas faire trop de sur-apprentissage.
+
+```{r}
+svmfit1.def = svm(Y~.,data=dat1)
+plot(svmfit1.def,dat1)
+summary(svmfit1.def)
+```
+
+# Prédiction à l'aide de la fonction `svm()`
+
+Nous pouvons faire des prédictions à l'aide de la fonction `svm()` de la manière suivante :
+
+```{r}
+#Creation du nouvel echantillon
+ntest = 50 # nombre d'individus dans l'échantillon de test
+Xtest = matrix(rnorm(p*ntest),ncol=p)
+Y1test = c(rep(1,ntest/2),rep(-1,ntest/2))
+Xtest[Y1test==1,] = Xtest[Y1test==1,]+1
+
+#Dataframe test
+dat.test = data.frame(X=Xtest,Y=as.factor(Y1test))
+
+#Prediction
+Y1pred.lin = predict(svmfit1.lin,dat.test)
+
+#Comparaison realite/prediction
+table(Y1test,Y1pred.lin)
+```
+66% de prévisions justes. 84% ok pour les points noirs et 48% ok pour les verts.
+
+* *Question 3 :* Faire de même avec le classifieur `svmfit1.def` estimé par défaut par la fonction `svm()` et comparer les résultats. 
+
+```{r}
+Y1pred.rad=predict(svmfit1.def,dat.test)
+table(Y1test,Y1pred.rad)
+```
+Ici 64% de prévisions justes au total. 
+
+80% de prévisions ok pour les points noirs. 48% ok pour les verts.
+
+Vert=-1 Noir=1.
+
+Il n'y a pas de différence flagrante de performance entre les deux modèles même si pour l'échantillon de test choisi, le svm linéaire semble être légèrement meilleur.
+

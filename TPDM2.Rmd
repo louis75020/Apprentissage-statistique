@@ -1,0 +1,176 @@
+---
+title: 'TP/DM2 : classification non supervisée'
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Nous nous intéressons à des données de criminalité aux Etats-Unis. Le jeu de données comprends une ligne par Etat et 4 colonnes contenant les variables suivantes :
+
+  - `Murder` : nombre d'arrestations pour meurtre pour 100 000 habitants;
+  - `Assault` : nombre d'arrestations pour agression pour 100 000 habitants;
+  - `UrbanPop` : pourcentage de population urbaine;
+  - `Rape` : nombre d'arrestations pour viol pour 100 000 habitants.
+  
+L'objectif est de déterminer des profils type d'états en fonction de ces 4 variables. 
+
+# Classification ascendante hiérarchique (CAH)
+
+Nous allons réaliser un dendrogramme des Etats à l'aide de la méthode de Ward. 
+
+```{r}
+
+res.hclust = hclust(dist(USArrests)^2,method="ward.D2")
+plot(res.hclust)
+```
+
+*Question 1:* Commenter le dendrogramme et proposer un choix du nombre de classes. 
+
+Ce dendrogramme représente la classification ascendante hiérarchique des êtats américains en fonction des variables 'Murder', 'Assault', 'UrbanPop' et 'Rape'.
+
+Il s'agit d'un arbre binaire avec en ordonnée 'Height' représentant la distance de Ward.
+La méthode expliquée dans la vidéo de François Husson est la suivante:
+
+(Initialisation): 1 classe=1 êtat.
+
+(A l'étape k): On a n-k classes différentes (où n désigne le nombre total de points).
+On agrège les classes $a,b \in (n-k) classes$ qui minimisent la distance de l'inertie inter, définie par $\frac{m_{a}m_{b}}{m_{a}+m_{b}}d^{2}(a,b)$ avec $m_{a}$ (resp. $m_{b}$) nombre d'individus dans la classe a (resp. b) et $d(a,b)$ distance (eucilidienne) entre les centres de gravité des classes a et b.
+
+A la vue du dendrogramme on est tentés de dire que 'Florida' et 'North Carolina' sont proches au sens des variables explicatives tandis que 'Florida' et 'New Hampshire' sont éloignés.
+
+Pour séparer les classes et trouver un nombre de classes "raisonnable" nous allons nous servir de l'implémentation proposée sur: http://larmarange.github.io/analyse-R/classification-ascendante-hierarchique.html
+
+```{r}
+inertie<-sort(res.hclust$height,decreasing=TRUE)
+plot(inertie,type="s",xlab='nbre de classes',ylab='Inertie')
+```
+
+Il y a 2 sauts principaux: nous sommes donc tentés de séparer en 2 ou 3 classes.
+
+```{r}
+plot(inertie, type = "s", xlab = "Nombre de classes", ylab = "Inertie")
+points(c(2, 3), inertie[c(2, 3)], col = c("green3", "red3"), cex = 2, lwd = 3)
+```
+
+La classification à 2 classes donne:
+
+```{r}
+plot(res.hclust, hang = -1)
+rect.hclust(res.hclust, 2, border = "green3")
+```
+
+Celle à 3 classes donne:
+
+```{r}
+plot(res.hclust, main = "Partition en 3 classes", hang = -1)
+rect.hclust(res.hclust, 3, border = "red3")
+```
+
+# Méthode des $k$-moyennes
+
+```{r}
+set.seed(2)
+```
+
+
+Nous utiliserons dans un premier temps la fonction `kmeans()`. Consulter l'aide de la fonction `kmeans()` et lancer la fonction pour un nombre de classes $k$ que vous choisirez. Vous pouvez faire plusieurs essais avec la même valeur de $k$ ou des valeurs différentes.  
+
+```{r,include=FALSE}
+k=3
+res = kmeans(USArrests,k)
+res
+```
+
+Le résultat de la fonction `kmeans()` vous donne :
+
+  - les moyennes des variables de chaque cluster,
+  - la classification des individus (ici les individus sont les Etats),
+  - la somme des carrés des distances à l'intérieur de chaque classe (`Within cluster sum of squares by cluster`) qui mesure l'homogénéité de chaque classe,
+  - le rapport $\mathcal I_{inter}/\mathcal I_G$ (noté `between_SS/total_SS`). 
+  
+Pour choisir $k$, nous allons tracer l'évolution du rapport $\mathcal I_{inter}/\mathcal I_G$ en fonction de $k$. 
+
+```{r}
+kvect = 1:15
+IintersIG = rep(NA,length(kvect))
+for (j in 1:length(kvect)){
+  res = kmeans(USArrests,kvect[j])
+  IintersIG[j] = res$betweenss/res$totss
+}
+plot(kvect,IintersIG,type='b',main='Evolution du rapport I_inter/I_G',xlab='k')
+```
+
+Nous voyons que le rapport $\mathcal I_{inter}/\mathcal I_G$ augmente beaucoup lorsque l'on passe de 1 à 2 classes ou, dans une moindre mesure, de 2 à 3 classes. Au-delà de 3 classes, le rapport $\mathcal I_{inter}/\mathcal I_G$ croît peu. Cela nous oriente vers une classification à 2 ou 3 classes. 
+
+Une fois choisi le nombre de classes, nous allons déterminer un profil type par classe. 
+
+```{r}
+k=3
+res3 = kmeans(USArrests,k)
+rbind(res3$centers,colMeans(USArrests))
+res3$cluster
+```
+
+Nous obtenons une classe avec des Etats ayant une criminalité basse (comprenant les Etats du Connecticut, Hawaï, Idaho,... attention cela peut varier pour différentes exécutions des $k$-moyennes à cause de l'aléa du à l'initialisation), une classe avec des Etats ayant une criminalité moyenne (Arkansas, Colorado, Géorgie,...) et une classe comprenant les Etats ayant une criminalité élevée (Alabama, Alaska, Arizona,...). 
+
+*Question 2:* faire de même avec $k=2$ et commenter les profils de chaque classe.
+
+```{r}
+require(factoextra)
+```
+
+## Création des 2 clusters via k-means
+
+```{r}
+k=2
+res2 = kmeans(USArrests,k)
+rbind(res2$centers,colMeans(USArrests))
+res2$cluster
+```
+
+2 clusters ont été crées. Le 1er cluster comprend les êtats avec une criminalité importante (l'Alabama, le nouveau Mexique, le Texas...) et l'autre les êtats ayant une criminalité faible (le New Jersey, le Wyoming, le Kansas...).
+
+Les êtats ayant une criminalité faible ont aussi un taux de population urbaine généralement moins important.
+
+Il est intéressant de comparer ce nouveau clustering avec les 2 précédents. Voir: https://thedatum.data.blog/2019/07/22/usa-arrests-hierarchical-clustering-using-diana-agnes/
+
+
+## Représentation des 2 clusters de k-means
+
+```{r}
+fviz_cluster(list(data=USArrests,cluster=res2$cluster))
+```
+
+## Représentation des 3 clusters de k-means & comparaison
+
+```{r}
+fviz_cluster(list(data=USArrests,cluster=res3$cluster))
+```
+
+On remarque que l'ensemble des êtats du cluster 2 des 3-means est bien regroupée dans le même cluster (le 2) des 2-means. Idem pour le cluster 1. C'est donc le cluster 3 qui a 'éclaté' lors de la supression de leur cluster.
+
+On remarque de plus que les statistiques descriptives des clusters 1 et 2 des 3-means d'une part et des clusters 1 et 2 des 2-means sont très similaires: on n'a pas perdu grand chose en enlevant un cluster.
+
+## Graphique et comparaison avec CAH-2
+
+```{r}
+fviz_cluster(list(data=USArrests,cluster=cutree(res.hclust,k=2)))
+```
+
+Les êtats du cluster 1 de 2-means sont tous dans le cluster 2 de CAH-2.
+
+Certains êtats qui étaient dans le cluster 2 de 2-means ont basculé dans le cluster 1 de CAH-2.
+
+La zone d'incertitude (ie la zone de chevauchement des clusters 1 et 2) est beaucoup plus grande avec CAH-2 qu'avec 2-means.
+
+## CAH-3 & k-means 3
+
+```{r}
+fviz_cluster(list(data=USArrests,cluster=cutree(res.hclust,k=3)))
+```
+Il est intéressant de remarquer qu'on a exactement les mêmes clusters pour CAH 3 et 3-means.
+
